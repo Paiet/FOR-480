@@ -1,0 +1,51 @@
+#include <QApplication>
+#include <QFileDialog>
+#include <QTextStream>
+#include <QMessageBox>
+
+#include <pcap.h>
+
+int main(int argc, char *argv[])
+{
+    QApplication a(argc, argv);
+
+    QStringList pcapFiles = QFileDialog::getOpenFileNames(nullptr, "Select PCAP Files", "", "PCAP Files (*.pcap)");
+    if (pcapFiles.isEmpty()) {
+        QMessageBox::warning(nullptr, "No Files Selected", "No PCAP files were selected.");
+        return 0;
+    }
+
+    foreach (QString pcapFile, pcapFiles) {
+        QString csvFile = pcapFile;
+        csvFile.replace(".pcap", ".csv");
+
+        QFile file(csvFile);
+        if (!file.open(QFile::WriteOnly | QFile::Truncate)) {
+            QMessageBox::warning(nullptr, "File Open Error", "Unable to open file for writing: " + csvFile);
+            continue;
+        }
+
+        QTextStream stream(&file);
+        stream << "timestamp,source,destination,protocol,length" << endl;
+
+        pcap_t *handle;
+        char errbuf[PCAP_ERRBUF_SIZE];
+
+        handle = pcap_open_offline(pcapFile.toStdString().c_str(), errbuf);
+        if (handle == nullptr) {
+            QMessageBox::warning(nullptr, "File Open Error", "Unable to open PCAP file: " + QString(errbuf));
+            continue;
+        }
+
+        struct pcap_pkthdr *header;
+        const u_char *packet;
+
+        while (pcap_next_ex(handle, &header, &packet) >= 0) {
+            stream << header->ts.tv_sec << "," << packet[0] << "," << packet[1] << "," << packet[2] << "," << header->len << endl;
+        }
+
+        file.close();
+    }
+
+    return 0;
+}
